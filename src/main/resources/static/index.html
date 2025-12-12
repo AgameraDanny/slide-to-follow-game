@@ -30,6 +30,38 @@
         }
         .hidden { display: none !important; }
 
+        /* --- LOADING OVERLAY (NEW) --- */
+        #loading-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .loader-box {
+            width: 60%; max-width: 300px; height: 4px;
+            background: #333; position: relative; overflow: hidden;
+            border-radius: 2px;
+            box-shadow: 0 0 15px var(--primary-red);
+        }
+        .loader-bar {
+            position: absolute; left: 0; top: 0; height: 100%; width: 100%;
+            background: var(--primary-red);
+            animation: loadingSlide 1.5s infinite ease-in-out;
+        }
+        .loading-text {
+            margin-top: 15px; color: var(--primary-red); font-size: 14px;
+            font-weight: bold; letter-spacing: 2px; text-transform: uppercase;
+            animation: pulseText 1s infinite alternate;
+        }
+        @keyframes loadingSlide {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(0%); }
+            100% { transform: translateX(100%); }
+        }
+        @keyframes pulseText {
+            0% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
         /* UI ELEMENTS */
         input { padding: 12px; margin: 5px; width: 70%; background: #222; border: 1px solid #444; color: white; text-align: center; border-radius: 5px; }
         .btn {
@@ -49,7 +81,7 @@
         }
         .danger-orb { background: white !important; box-shadow: 0 0 40px white !important; }
 
-        /* CHAT BOX (Overlay) */
+        /* CHAT BOX */
         #chat-container {
             position: absolute; bottom: 0; left: 0; width: 100%; height: 35%; 
             background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
@@ -57,64 +89,34 @@
         }
         .chat-minimized { transform: translateY(88%); }
         #chat-toggle { background: #333; color: white; text-align: center; padding: 5px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #555; }
+        #chat-messages { flex: 1; overflow-y: auto; padding: 10px; font-size: 13px; display: flex; flex-direction: column; gap: 5px; }
         
-        #chat-messages { 
-            flex: 1; overflow-y: auto; padding: 10px; font-size: 13px; 
-            display: flex; flex-direction: column; gap: 5px; /* Spacing between messages */
-        }
-
-        /* --- NEW CHAT STYLES --- */
-        .message-bubble {
-            padding: 8px 12px;
-            border-radius: 15px;
-            max-width: 80%;
-            word-wrap: break-word;
-        }
-        /* My Message (Right, Red) */
-        .my-message {
-            align-self: flex-end;
-            background-color: var(--primary-red);
-            color: white;
-            text-align: right;
-            border-bottom-right-radius: 2px;
-        }
-        /* Others Message (Left, Grey) */
-        .other-message {
-            align-self: flex-start;
-            background-color: #333;
-            color: #ddd;
-            border-bottom-left-radius: 2px;
-        }
-        /* System Message (Center) */
-        .system-message {
-            align-self: center;
-            font-size: 11px;
-            color: #888;
-            font-style: italic;
-            background: transparent;
-        }
-
-        /* Highlighted Mention Style */
-        .mentioned-message {
-            align-self: flex-start;
-            background-color: #3d3300; /* Dark Yellow/Gold Background */
-            border: 1px solid #ffd700; /* Gold Border */
-            color: #ffd700;            /* Gold Text */
-            box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); /* Glow effect */
-            border-bottom-left-radius: 2px;
-        }
+        /* CHAT STYLES */
+        .message-bubble { padding: 8px 12px; border-radius: 15px; max-width: 80%; word-wrap: break-word; }
+        .my-message { align-self: flex-end; background-color: var(--primary-red); color: white; text-align: right; border-bottom-right-radius: 2px; }
+        .other-message { align-self: flex-start; background-color: #333; color: #ddd; border-bottom-left-radius: 2px; }
+        .system-message { align-self: center; font-size: 11px; color: #888; font-style: italic; background: transparent; }
+        .mentioned-message { align-self: flex-start; background-color: #3d3300; border: 1px solid #ffd700; color: #ffd700; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); border-bottom-left-radius: 2px; }
 
         #chat-input-area { display: flex; padding: 8px; background: #222; }
         #chat-msg-input { width: 75%; text-align: left; margin: 0; border: none; background: #333; }
         #chat-send { width: 20%; margin: 0 0 0 5px; background: var(--primary-red); border: none; color: white; border-radius: 5px; cursor: pointer; }
 
-        /* LISTS (History/Leaderboard) */
+        /* LISTS */
         ul { list-style: none; padding: 0; width: 90%; max-height: 200px; overflow-y: auto; text-align: left; }
         li { padding: 8px; border-bottom: 1px solid #333; font-size: 14px; display: flex; justify-content: space-between; }
         .score-val { color: var(--primary-red); font-weight: bold; }
     </style>
 </head>
 <body>
+
+    <!-- LOADING OVERLAY -->
+    <div id="loading-overlay" class="hidden">
+        <div class="loader-box">
+            <div class="loader-bar"></div>
+        </div>
+        <div class="loading-text">ACCESSING MAINFRAME...</div>
+    </div>
 
     <!-- 1. LOGIN -->
     <div id="auth-screen" class="screen">
@@ -179,6 +181,18 @@
     let currentUser = null;
     let stompClient = null;
 
+    // --- LOADING SYSTEM ---
+    function showLoading(show, text="LOADING...") {
+        const overlay = document.getElementById('loading-overlay');
+        const txt = document.querySelector('.loading-text');
+        if(show) {
+            txt.innerText = text;
+            overlay.classList.remove('hidden');
+        } else {
+            overlay.classList.add('hidden');
+        }
+    }
+
     // --- NAVIGATION ---
     function showScreen(id) {
         document.querySelectorAll('.screen, #game-ui').forEach(el => el.classList.add('hidden'));
@@ -195,15 +209,9 @@
     function connectSocket() {
         let socket = new SockJS('http://localhost:8080/ws');
         stompClient = Stomp.over(socket);
-        
-        // ENABLE DEBUGGING (Remove the line that set it to null)
-        // stompClient.debug = null; <--- DELETE THIS LINE
-
         stompClient.connect({}, function (frame) {
             console.log('Connected: ' + frame);
             stompClient.subscribe('/topic/public', function (message) {
-                // Log incoming messages to console to verify receipt
-                console.log("Received:", JSON.parse(message.body));
                 showChatMessage(JSON.parse(message.body));
             });
             stompClient.send("/app/chat.addUser", {}, JSON.stringify({sender: currentUser.username, type: 'JOIN'}));
@@ -228,18 +236,14 @@
             div.classList.add('system-message');
             div.innerText = message.content;
         } else {
-            // 1. Check if it is MY message
             if(message.sender === currentUser.username) {
                 div.classList.add('my-message');
                 div.innerText = message.content; 
             } 
-            // 2. Check if I am TAGGED (@username)
             else if (containsMention(message.content)) {
                 div.classList.add('mentioned-message');
-                // Highlight the tag itself inside the text
                 div.innerHTML = `<span style="font-weight:bold;">${message.sender}:</span> ${highlightText(message.content)}`;
             } 
-            // 3. Standard Message from others
             else {
                 div.classList.add('other-message');
                 div.innerHTML = `<span style="color:var(--primary-red); font-weight:bold;">${message.sender}:</span> ${message.content}`;
@@ -249,17 +253,14 @@
         area.scrollTop = area.scrollHeight; 
     }
 
-    // Helper to check for tag (Case Insensitive)
     function containsMention(text) {
         if (!currentUser || !currentUser.username) return false;
         let tag = "@" + currentUser.username.toLowerCase();
         return text.toLowerCase().includes(tag);
     }
 
-    // Helper to bold the specific tag text visually
     function highlightText(text) {
         let tag = "@" + currentUser.username;
-        // Regex to replace @username with bold version, case insensitive
         let re = new RegExp(tag, "gi"); 
         return text.replace(re, `<b style="color:white; text-decoration:underline;">$&</b>`);
     }
@@ -282,26 +283,33 @@
     async function login() {
         const u = document.getElementById('u_name').value;
         const p = document.getElementById('u_pass').value;
+        
+        showLoading(true, "AUTHENTICATING..."); // SHOW LOADING
+
         try {
             const res = await fetch(API_URL + '/auth', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username: u, password: p})
             });
+            
             if(res.ok) {
                 currentUser = await res.json();
-                
-                // 1. Connect Live Chat
                 connectSocket(); 
                 
-                // 2. Load Old Messages (NEW LINE)
-                loadChatHistory();
+                showLoading(true, "SYNCING DATA...");
+                await loadChatHistory();
                 
                 showMenu();
-            } else alert("Invalid Login");
-        } catch(e) { alert("Server Error (Is Backend Running?)"); }
+            } else {
+                alert("Invalid Login");
+            }
+        } catch(e) { 
+            alert("Server Error (Is Backend Running?)"); 
+        } finally {
+            showLoading(false); // HIDE LOADING
+        }
     }
 
-    // Safely fetch data even if totalScore is null
     async function fetchMyData() {
         if(currentUser) {
             let score = currentUser.totalScore || 0; 
@@ -311,27 +319,35 @@
 
     // --- DATA FETCHING ---
     async function showLeaderboard() {
-        showScreen('leaderboard-screen');
-        const res = await fetch(API_URL + '/leaderboard');
-        const data = await res.json();
-        const list = document.getElementById('lb-list');
-        list.innerHTML = "";
-        data.forEach((p, i) => {
-            let s = p.totalScore || 0;
-            list.innerHTML += `<li><span>#${i+1} ${p.username}</span> <span class="score-val">${s.toFixed(2)}</span></li>`;
-        });
+        showLoading(true, "FETCHING RANKS...");
+        try {
+            const res = await fetch(API_URL + '/leaderboard');
+            const data = await res.json();
+            const list = document.getElementById('lb-list');
+            list.innerHTML = "";
+            data.forEach((p, i) => {
+                let s = p.totalScore || 0;
+                list.innerHTML += `<li><span>#${i+1} ${p.username}</span> <span class="score-val">${s.toFixed(2)}</span></li>`;
+            });
+            showScreen('leaderboard-screen');
+        } catch(e) { console.log(e); }
+        finally { showLoading(false); }
     }
 
     async function showHistory() {
-        showScreen('history-screen');
-        const res = await fetch(API_URL + `/history/${currentUser.username}`);
-        const data = await res.json();
-        const list = document.getElementById('hist-list');
-        list.innerHTML = "";
-        data.forEach(r => {
-            let date = new Date(r.playedAt).toLocaleDateString();
-            list.innerHTML += `<li><span>${date}</span> <span class="score-val">+${r.score.toFixed(2)}</span></li>`;
-        });
+        showLoading(true, "LOADING HISTORY...");
+        try {
+            const res = await fetch(API_URL + `/history/${currentUser.username}`);
+            const data = await res.json();
+            const list = document.getElementById('hist-list');
+            list.innerHTML = "";
+            data.forEach(r => {
+                let date = new Date(r.playedAt).toLocaleDateString();
+                list.innerHTML += `<li><span>${date}</span> <span class="score-val">+${r.score.toFixed(2)}</span></li>`;
+            });
+            showScreen('history-screen');
+        } catch(e) { console.log(e); }
+        finally { showLoading(false); }
     }
 
     // --- GAME LOGIC ---
@@ -406,15 +422,20 @@
         if(win) score = 72.00;
         if(score < 0) score = 0;
         
+        showLoading(true, "SAVING DATA...");
+
         fetch(API_URL + '/score', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({username: currentUser.username, time: score.toFixed(2)})
-        }).then(res => res.json()).then(updatedPlayer => {
+        })
+        .then(res => res.json())
+        .then(updatedPlayer => {
             currentUser = updatedPlayer;
             showScreen('game-over');
             document.getElementById('go-title').innerText = win ? "PERFECT RUN" : "ROUND OVER";
             document.getElementById('round-score').innerText = score.toFixed(2);
-        });
+        })
+        .finally(() => showLoading(false));
     }
 </script>
 </body>
