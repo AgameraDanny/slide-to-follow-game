@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Red Orb: Online</title>
+    <!-- WebSocket Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    
+    <style>
+        /* --- THEME: CYBER RED --- */
+        :root {
+            --primary-red: #ff3333;
+            --dark-bg: #121212;
+            --panel-bg: rgba(30, 30, 30, 0.95);
+        }
+
+        body { 
+            margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; 
+            background-color: var(--dark-bg); color: white; 
+            touch-action: none; user-select: none;
+        }
+
+        /* SCREENS */
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: var(--dark-bg); z-index: 10;
+        }
+        .hidden { display: none !important; }
+
+        /* UI ELEMENTS */
+        input { padding: 12px; margin: 5px; width: 70%; background: #222; border: 1px solid #444; color: white; text-align: center; border-radius: 5px; }
+        .btn {
+            padding: 12px 30px; margin: 8px; width: 80%; max-width: 250px;
+            background: transparent; border: 2px solid var(--primary-red); color: var(--primary-red);
+            font-weight: bold; cursor: pointer; border-radius: 5px; text-transform: uppercase;
+        }
+        .btn-fill { background: var(--primary-red); color: white; }
+
+        /* GAME HUD */
+        #game-ui { position: absolute; width: 100%; height: 100%; }
+        #timer { position: absolute; top: 20px; width: 100%; text-align: center; font-size: 40px; font-weight: bold; pointer-events: none; }
+        #orb {
+            position: absolute; width: 100px; height: 100px; border-radius: 50%;
+            background: radial-gradient(circle, #ffcccc 10%, #ff3333 50%, #800000 100%);
+            transform: translate(-50%, -50%); box-shadow: 0 0 20px red;
+        }
+        .danger-orb { background: white !important; box-shadow: 0 0 40px white !important; }
+
+        /* CHAT BOX (Overlay) */
+        #chat-container {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 35%; 
+            background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
+            border-top: 2px solid var(--primary-red); z-index: 20; transition: transform 0.3s;
+        }
+        .chat-minimized { transform: translateY(88%); }
+        #chat-toggle { background: #333; color: white; text-align: center; padding: 5px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #555; }
+        
+        #chat-messages { 
+            flex: 1; overflow-y: auto; padding: 10px; font-size: 13px; 
+            display: flex; flex-direction: column; gap: 5px; /* Spacing between messages */
+        }
+
+        /* --- NEW CHAT STYLES --- */
+        .message-bubble {
+            padding: 8px 12px;
+            border-radius: 15px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        /* My Message (Right, Red) */
+        .my-message {
+            align-self: flex-end;
+            background-color: var(--primary-red);
+            color: white;
+            text-align: right;
+            border-bottom-right-radius: 2px;
+        }
+        /* Others Message (Left, Grey) */
+        .other-message {
+            align-self: flex-start;
+            background-color: #333;
+            color: #ddd;
+            border-bottom-left-radius: 2px;
+        }
+        /* System Message (Center) */
+        .system-message {
+            align-self: center;
+            font-size: 11px;
+            color: #888;
+            font-style: italic;
+            background: transparent;
+        }
+
+        /* Highlighted Mention Style */
+        .mentioned-message {
+            align-self: flex-start;
+            background-color: #3d3300; /* Dark Yellow/Gold Background */
+            border: 1px solid #ffd700; /* Gold Border */
+            color: #ffd700;            /* Gold Text */
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); /* Glow effect */
+            border-bottom-left-radius: 2px;
+        }
+
+        #chat-input-area { display: flex; padding: 8px; background: #222; }
+        #chat-msg-input { width: 75%; text-align: left; margin: 0; border: none; background: #333; }
+        #chat-send { width: 20%; margin: 0 0 0 5px; background: var(--primary-red); border: none; color: white; border-radius: 5px; cursor: pointer; }
+
+        /* LISTS (History/Leaderboard) */
+        ul { list-style: none; padding: 0; width: 90%; max-height: 200px; overflow-y: auto; text-align: left; }
+        li { padding: 8px; border-bottom: 1px solid #333; font-size: 14px; display: flex; justify-content: space-between; }
+        .score-val { color: var(--primary-red); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. LOGIN -->
+    <div id="auth-screen" class="screen">
+        <h1 style="color:var(--primary-red)">RED ORB ONLINE</h1>
+        <input type="text" id="u_name" placeholder="Username">
+        <input type="password" id="u_pass" placeholder="Password">
+        <button class="btn btn-fill" onclick="login()">Connect</button>
+    </div>
+
+    <!-- 2. MAIN MENU -->
+    <div id="main-menu" class="screen hidden">
+        <h2 id="welcome-msg">Welcome</h2>
+        <h3 style="color:#888; margin-top:0;">Total Score: <span id="my-total-score" style="color:white">0.00</span></h3>
+        
+        <button class="btn btn-fill" onclick="startGame()">Start Round</button>
+        <button class="btn" onclick="showLeaderboard()">Global Ranks</button>
+        <button class="btn" onclick="showHistory()">My History</button>
+    </div>
+
+    <!-- 3. LEADERBOARD -->
+    <div id="leaderboard-screen" class="screen hidden">
+        <h2>GLOBAL RANKING</h2>
+        <p style="font-size:12px; color:#666">Cumulative Scores (All time)</p>
+        <ul id="lb-list"></ul>
+        <button class="btn" onclick="showMenu()">Back</button>
+    </div>
+
+    <!-- 4. HISTORY -->
+    <div id="history-screen" class="screen hidden">
+        <h2>MY MATCH HISTORY</h2>
+        <ul id="hist-list"></ul>
+        <button class="btn" onclick="showMenu()">Back</button>
+    </div>
+
+    <!-- 5. GAME UI -->
+    <div id="game-ui" class="hidden">
+        <div id="timer">72.00</div>
+        <div id="orb"></div>
+    </div>
+
+    <!-- 6. GAME OVER -->
+    <div id="game-over" class="screen hidden">
+        <h1 id="go-title">ROUND OVER</h1>
+        <h2>Score: <span id="round-score">0.00</span></h2>
+        <p style="color:#aaa">Score added to Total.</p>
+        <button class="btn btn-fill" onclick="startGame()">Play Again</button>
+        <button class="btn" onclick="showMenu()">Menu</button>
+    </div>
+
+    <!-- CHAT OVERLAY -->
+    <div id="chat-container" class="hidden chat-minimized">
+        <div id="chat-toggle" onclick="toggleChat()">▲ LIVE CHAT ▲</div>
+        <div id="chat-messages"></div>
+        <div id="chat-input-area">
+            <input type="text" id="chat-msg-input" placeholder="Type message...">
+            <button id="chat-send" onclick="sendChat()">➤</button>
+        </div>
+    </div>
+
+<script>
+    const API_URL = "http://localhost:8080/api";
+    let currentUser = null;
+    let stompClient = null;
+
+    // --- NAVIGATION ---
+    function showScreen(id) {
+        document.querySelectorAll('.screen, #game-ui').forEach(el => el.classList.add('hidden'));
+        document.getElementById(id).classList.remove('hidden');
+        if(id !== 'auth-screen') document.getElementById('chat-container').classList.remove('hidden');
+    }
+    
+    function showMenu() { 
+        showScreen('main-menu'); 
+        fetchMyData(); 
+    }
+    
+    // --- WEBSOCKETS (CHAT) ---
+    function connectSocket() {
+        let socket = new SockJS('http://localhost:8080/ws');
+        stompClient = Stomp.over(socket);
+        
+        // ENABLE DEBUGGING (Remove the line that set it to null)
+        // stompClient.debug = null; <--- DELETE THIS LINE
+
+        stompClient.connect({}, function (frame) {
+            console.log('Connected: ' + frame);
+            stompClient.subscribe('/topic/public', function (message) {
+                // Log incoming messages to console to verify receipt
+                console.log("Received:", JSON.parse(message.body));
+                showChatMessage(JSON.parse(message.body));
+            });
+            stompClient.send("/app/chat.addUser", {}, JSON.stringify({sender: currentUser.username, type: 'JOIN'}));
+        });
+    }
+
+    function sendChat() {
+        let input = document.getElementById('chat-msg-input');
+        if(input.value && stompClient) {
+            let chatMessage = { sender: currentUser.username, content: input.value, type: 'CHAT' };
+            stompClient.send("/app/chat.sendMessage", {}, JSON.stringify(chatMessage));
+            input.value = '';
+        }
+    }
+
+    function showChatMessage(message) {
+        let area = document.getElementById('chat-messages');
+        let div = document.createElement('div');
+        div.classList.add('message-bubble');
+
+        if(message.type === 'JOIN') {
+            div.classList.add('system-message');
+            div.innerText = message.content;
+        } else {
+            // 1. Check if it is MY message
+            if(message.sender === currentUser.username) {
+                div.classList.add('my-message');
+                div.innerText = message.content; 
+            } 
+            // 2. Check if I am TAGGED (@username)
+            else if (containsMention(message.content)) {
+                div.classList.add('mentioned-message');
+                // Highlight the tag itself inside the text
+                div.innerHTML = `<span style="font-weight:bold;">${message.sender}:</span> ${highlightText(message.content)}`;
+            } 
+            // 3. Standard Message from others
+            else {
+                div.classList.add('other-message');
+                div.innerHTML = `<span style="color:var(--primary-red); font-weight:bold;">${message.sender}:</span> ${message.content}`;
+            }
+        }
+        area.appendChild(div);
+        area.scrollTop = area.scrollHeight; 
+    }
+
+    // Helper to check for tag (Case Insensitive)
+    function containsMention(text) {
+        if (!currentUser || !currentUser.username) return false;
+        let tag = "@" + currentUser.username.toLowerCase();
+        return text.toLowerCase().includes(tag);
+    }
+
+    // Helper to bold the specific tag text visually
+    function highlightText(text) {
+        let tag = "@" + currentUser.username;
+        // Regex to replace @username with bold version, case insensitive
+        let re = new RegExp(tag, "gi"); 
+        return text.replace(re, `<b style="color:white; text-decoration:underline;">$&</b>`);
+    }
+
+    async function loadChatHistory() {
+        try {
+            const res = await fetch(API_URL + '/chat/history');
+            const messages = await res.json();
+            messages.forEach(msg => {
+                showChatMessage(msg);
+            });
+        } catch(e) { console.log("Could not load history"); }
+    }
+
+    function toggleChat() {
+        document.getElementById('chat-container').classList.toggle('chat-minimized');
+    }
+
+    // --- AUTH ---
+    async function login() {
+        const u = document.getElementById('u_name').value;
+        const p = document.getElementById('u_pass').value;
+        try {
+            const res = await fetch(API_URL + '/auth', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: u, password: p})
+            });
+            if(res.ok) {
+                currentUser = await res.json();
+                
+                // 1. Connect Live Chat
+                connectSocket(); 
+                
+                // 2. Load Old Messages (NEW LINE)
+                loadChatHistory();
+                
+                showMenu();
+            } else alert("Invalid Login");
+        } catch(e) { alert("Server Error (Is Backend Running?)"); }
+    }
+
+    // Safely fetch data even if totalScore is null
+    async function fetchMyData() {
+        if(currentUser) {
+            let score = currentUser.totalScore || 0; 
+            document.getElementById('my-total-score').innerText = score.toFixed(2);
+        }
+    }
+
+    // --- DATA FETCHING ---
+    async function showLeaderboard() {
+        showScreen('leaderboard-screen');
+        const res = await fetch(API_URL + '/leaderboard');
+        const data = await res.json();
+        const list = document.getElementById('lb-list');
+        list.innerHTML = "";
+        data.forEach((p, i) => {
+            let s = p.totalScore || 0;
+            list.innerHTML += `<li><span>#${i+1} ${p.username}</span> <span class="score-val">${s.toFixed(2)}</span></li>`;
+        });
+    }
+
+    async function showHistory() {
+        showScreen('history-screen');
+        const res = await fetch(API_URL + `/history/${currentUser.username}`);
+        const data = await res.json();
+        const list = document.getElementById('hist-list');
+        list.innerHTML = "";
+        data.forEach(r => {
+            let date = new Date(r.playedAt).toLocaleDateString();
+            list.innerHTML += `<li><span>${date}</span> <span class="score-val">+${r.score.toFixed(2)}</span></li>`;
+        });
+    }
+
+    // --- GAME LOGIC ---
+    let gameActive = false;
+    let timeLeft = 72.00;
+    let orb = document.getElementById('orb');
+    let orbX, orbY, velX=0, velY=0, orbSize=100;
+    let touchX=0, touchY=0;
+
+    function startGame() {
+        showScreen('game-ui');
+        timeLeft = 72.00;
+        orbSize = 100;
+        orbX = window.innerWidth/2;
+        orbY = window.innerHeight/2;
+        gameActive = false;
+        document.getElementById('timer').innerText = "72.00";
+        updateOrb();
+        
+        orb.onmousedown = orb.ontouchstart = (e) => {
+            if(e.type==='touchstart') e.preventDefault();
+            gameActive = true;
+            let t = e.touches?e.touches[0]:e;
+            touchX = t.clientX; touchY = t.clientY;
+            gameLoop();
+        };
+        
+        window.addEventListener('touchmove', (e)=>{if(gameActive) {touchX=e.touches[0].clientX; touchY=e.touches[0].clientY;}});
+        window.addEventListener('mousemove', (e)=>{if(gameActive) {touchX=e.clientX; touchY=e.clientY;}});
+        window.addEventListener('touchend', endByLift);
+        window.addEventListener('mouseup', endByLift);
+    }
+
+    function endByLift() { if(gameActive) endGame(false); }
+
+    function gameLoop() {
+        if(!gameActive) return;
+
+        let chaos = 1 + (72-timeLeft)/10;
+        if(Math.random()<0.05) { velX+=(Math.random()-0.5)*4*chaos; velY+=(Math.random()-0.5)*4*chaos; }
+        velX*=0.96; velY*=0.96;
+        orbX+=velX; orbY+=velY;
+
+        let r = orbSize/2;
+        if(orbX<r || orbX>window.innerWidth-r) { velX*=-1; orbSize*=0.95; }
+        if(orbY<r || orbY>window.innerHeight-r) { velY*=-1; orbSize*=0.95; }
+        if(orbSize < 30) { endGame(false); return; }
+
+        updateOrb();
+
+        let d = Math.sqrt(Math.pow(touchX-orbX,2) + Math.pow(touchY-orbY,2));
+        if(d < r+30) timeLeft -= 0.02;
+        else timeLeft += 0.05;
+
+        document.getElementById('timer').innerText = timeLeft.toFixed(2);
+
+        if(timeLeft <= 0) endGame(true);
+        else requestAnimationFrame(gameLoop);
+    }
+
+    function updateOrb() {
+        orb.style.width=orbSize+"px"; orb.style.height=orbSize+"px";
+        orb.style.left=orbX+"px"; orb.style.top=orbY+"px";
+    }
+
+    function endGame(win) {
+        gameActive = false;
+        window.removeEventListener('touchend', endByLift);
+        window.removeEventListener('mouseup', endByLift);
+
+        let score = 72.00 - timeLeft;
+        if(win) score = 72.00;
+        if(score < 0) score = 0;
+        
+        fetch(API_URL + '/score', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username: currentUser.username, time: score.toFixed(2)})
+        }).then(res => res.json()).then(updatedPlayer => {
+            currentUser = updatedPlayer;
+            showScreen('game-over');
+            document.getElementById('go-title').innerText = win ? "PERFECT RUN" : "ROUND OVER";
+            document.getElementById('round-score').innerText = score.toFixed(2);
+        });
+    }
+</script>
+</body>
+</html>
