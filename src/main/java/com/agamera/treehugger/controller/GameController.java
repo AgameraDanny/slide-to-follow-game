@@ -3,6 +3,7 @@ package com.agamera.treehugger.controller;
 import com.agamera.treehugger.model.*;
 import com.agamera.treehugger.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -17,23 +18,33 @@ public class GameController {
 
     // 1. Auth (Login/Register)
     @PostMapping("/auth")
-    public Player auth(@RequestBody Map<String, String> data) {
-        String u = data.get("username");
-        String p = data.get("password");
+    public ResponseEntity<?> auth(@RequestBody Map<String, String> data) {
+        String u = data.get("username").trim(); // .trim() removes accidental spaces!
+        String p = data.get("password").trim();
         
         Player player = playerRepo.findByUsername(u);
+        
+        // LOGIN LOGIC
         if (player != null) {
-            // Login Check
-            if (!player.getPassword().equals(p)) throw new RuntimeException("Invalid Password");
-            return player;
+            if (!player.getPassword().equals(p)) {
+                // Return 401 instead of crashing (500)
+                return ResponseEntity.status(401).body("Wrong Password");
+            }
+            return ResponseEntity.ok(player);
         }
         
-        // Register New User (We removed Phone to simplify)
-        Player newP = new Player();
-        newP.setUsername(u);
-        newP.setPassword(p);
-        newP.setTotalScore(0.0);
-        return playerRepo.save(newP);
+        // REGISTER LOGIC
+        try {
+            Player newP = new Player();
+            newP.setUsername(u);
+            newP.setPassword(p);
+            newP.setTotalScore(0.0);
+            Player savedPlayer = playerRepo.save(newP);
+            return ResponseEntity.ok(savedPlayer);
+        } catch (Exception e) {
+            // If username exists (case sensitivity issue), return error
+            return ResponseEntity.status(409).body("Username already taken");
+        }
     }
 
     // 2. Submit Score
