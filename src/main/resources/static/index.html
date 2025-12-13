@@ -106,6 +106,33 @@
         ul { list-style: none; padding: 0; width: 90%; max-height: 200px; overflow-y: auto; text-align: left; }
         li { padding: 8px; border-bottom: 1px solid #333; font-size: 14px; display: flex; justify-content: space-between; }
         .score-val { color: var(--primary-red); font-weight: bold; }
+
+        /* TETHER (Laser Line) */
+        #tether {
+            position: absolute;
+            height: 4px;
+            background-color: var(--primary-red);
+            transform-origin: 0 50%; /* Rotate from the left tip */
+            pointer-events: none;
+            box-shadow: 0 0 15px var(--primary-red);
+            display: none; /* Hidden by default */
+            z-index: 4;
+            border-radius: 2px;
+        }
+
+        /* SCREEN WARNING (Red edges when losing) */
+        .warning-state {
+            box-shadow: inset 0 0 100px rgba(255, 0, 0, 0.6);
+            transition: box-shadow 0.1s;
+        }
+
+        /* WARNING TEXT */
+        #warning-msg {
+            position: absolute; top: 120px; width: 100%; text-align: center;
+            color: var(--primary-red); font-weight: bold; font-size: 18px;
+            letter-spacing: 2px; text-shadow: 0 0 5px red;
+            display: none; pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -154,7 +181,10 @@
     <!-- 5. GAME UI -->
     <div id="game-ui" class="hidden">
         <div id="timer">72.00</div>
+        <div id="warning-msg">SIGNAL LOST - REACQUIRE!</div>
         <div id="orb"></div>
+        <!-- The Laser Line -->
+        <div id="tether"></div>
     </div>
 
     <!-- 6. GAME OVER -->
@@ -388,11 +418,13 @@
     function gameLoop() {
         if(!gameActive) return;
 
+        // 1. Physics (Movement)
         let chaos = 1 + (72-timeLeft)/10;
         if(Math.random()<0.05) { velX+=(Math.random()-0.5)*4*chaos; velY+=(Math.random()-0.5)*4*chaos; }
         velX*=0.96; velY*=0.96;
         orbX+=velX; orbY+=velY;
 
+        // 2. Wall Bouncing
         let r = orbSize/2;
         if(orbX<r || orbX>window.innerWidth-r) { velX*=-1; orbSize*=0.95; }
         if(orbY<r || orbY>window.innerHeight-r) { velY*=-1; orbSize*=0.95; }
@@ -400,9 +432,48 @@
 
         updateOrb();
 
-        let d = Math.sqrt(Math.pow(touchX-orbX,2) + Math.pow(touchY-orbY,2));
-        if(d < r+30) timeLeft -= 0.02;
-        else timeLeft += 0.05;
+        // 3. Tracking Logic
+        let dx = orbX - touchX;
+        let dy = orbY - touchY;
+        let d = Math.sqrt(dx*dx + dy*dy);
+        
+        const ui = document.getElementById('game-ui');
+        const tether = document.getElementById('tether');
+        const warning = document.getElementById('warning-msg');
+
+        if(d < r+30) { 
+            // --- ON TARGET (GOOD) ---
+            timeLeft -= 0.02;
+            
+            // Visuals: Clean
+            orb.classList.remove('danger-orb');
+            ui.classList.remove('warning-state');
+            tether.style.display = 'none';
+            warning.style.display = 'none';
+            document.getElementById('timer').style.color = "white";
+        } 
+        else { 
+            // --- OFF TARGET (BAD) ---
+            timeLeft += 0.05; // Penalty
+            
+            // Visuals: Warning Mode
+            orb.classList.add('danger-orb');
+            ui.classList.add('warning-state');
+            document.getElementById('timer').style.color = "var(--primary-red)";
+            warning.style.display = 'block';
+
+            // DRAW TETHER (Laser from Finger to Orb)
+            tether.style.display = 'block';
+            let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            
+            // Position tether at finger
+            tether.style.left = touchX + 'px';
+            tether.style.top = touchY + 'px';
+            // Stretch width to reach orb
+            tether.style.width = d + 'px';
+            // Rotate to point at orb
+            tether.style.transform = `rotate(${angle}deg)`;
+        }
 
         document.getElementById('timer').innerText = timeLeft.toFixed(2);
 
