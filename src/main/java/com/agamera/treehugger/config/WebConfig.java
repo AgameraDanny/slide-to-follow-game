@@ -10,9 +10,8 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                // Uses "Patterns" instead of "Origins".
-                // This allows ALL domains (*) but is smarter about Security headers
-                // so it doesn't crash when allowCredentials is true.
+                // "Patterns" allows the wildcard * to work with Credentials
+                // This is the Magic Fix for Render
                 .allowedOriginPatterns("*") 
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
