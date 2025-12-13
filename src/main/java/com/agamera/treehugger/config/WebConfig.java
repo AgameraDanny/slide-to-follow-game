@@ -10,7 +10,10 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOriginPatterns("*") // <--- This is the Key Fix!
+                .allowedOrigins(
+                    "https://slide-to-follow-game.onrender.com", // Your Online Game
+                    "http://localhost:8080"                        // Your Local Test
+                )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true);
