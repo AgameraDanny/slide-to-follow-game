@@ -10,7 +10,6 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*")
 public class GameController {
 
     @Autowired PlayerRepository playerRepo;

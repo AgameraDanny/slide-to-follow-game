@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Collections;
 
 @Controller
-@CrossOrigin(origins = "*")
 public class ChatController {
 
     @Autowired
